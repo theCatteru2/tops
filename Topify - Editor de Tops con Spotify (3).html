@@ -1,0 +1,2269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Topify — Tus Tops de Spotify</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-main: #0f1115;
+      --bg-card: #181c24;
+      --bg-elevated: #222834;
+      --accent: #1db954;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #2a3140;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      overflow-x: hidden;
+      min-height: 100dvh;
+    }
+
+    /* Clases utilitarias vinculadas a las variables del tema */
+    .t-bg-main { background-color: var(--bg-main); }
+    .t-bg-card { background-color: var(--bg-card); }
+    .t-bg-elevated { background-color: var(--bg-elevated); }
+    .t-accent-bg { background-color: var(--accent); color: #0b0f14; }
+    .t-accent-text { color: var(--accent); }
+    .t-text-main { color: var(--text-main); }
+    .t-text-muted { color: var(--text-muted); }
+    .t-border { border-color: var(--border-color); }
+
+    /* Scrollbar sutil */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 99px; }
+
+    /* Inputs de color estilizados */
+    input[type="color"] {
+      -webkit-appearance: none;
+      appearance: none;
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch {
+      border: 2px solid var(--border-color);
+      border-radius: 10px;
+    }
+
+    /* Animaciones suaves */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-up { animation: fadeUp 0.2s ease-out forwards; }
+
+    @keyframes slideUpModal {
+      from { opacity: 0; transform: translateY(28px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-modal { animation: slideUpModal 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+    /* Estado visual durante Drag & Drop */
+    .drag-handle {
+      touch-action: none;
+      cursor: grab;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    .dragging-card {
+      opacity: 0.92;
+      transform: scale(1.02);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+      z-index: 20;
+      position: relative;
+    }
+
+    /* Espacio seguro para barra inferior en móvil */
+    .safe-bottom {
+      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .nav-safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  </style>
+</head>
+<body class="t-bg-main t-text-main antialiased selection:bg-emerald-500/30">
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <div id="app" class="max-w-xl mx-auto min-h-screen relative flex flex-col">
+
+    <!-- HEADER SUPERIOR -->
+    <header id="main-header" class="sticky top-0 z-30 t-bg-main/90 backdrop-blur-md border-b t-border px-4 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <button id="header-back-btn" class="hidden p-2 -ml-2 rounded-xl hover:bg-white/10 active:scale-95 transition" aria-label="Volver">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 id="header-title" class="text-lg font-extrabold tracking-tight truncate">Mis Tops</h1>
+          <p id="header-subtitle" class="text-xs t-text-muted truncate hidden"></p>
+        </div>
+      </div>
+
+      <!-- Estado de conexión Spotify -->
+      <div id="header-actions" class="flex items-center gap-2 shrink-0">
+        <button id="spotify-status-pill" onclick="handleSpotifyPillClick()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border t-border t-bg-card active:scale-95 transition">
+          <span id="spotify-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span id="spotify-pill-text">Conectar</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ÁREA DE CONTENIDO DINÁMICO -->
+    <main id="main-content" class="flex-1 px-4 pt-4 safe-bottom">
+
+      <!-- ================= VISTA 1: MIS TOPS ================= -->
+      <section id="view-tops" class="space-y-4 animate-fade-up">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider t-text-muted">Tus rankings</p>
+            <p id="tops-count-label" class="text-sm t-text-muted">0 listas creadas</p>
+          </div>
+          <button onclick="openCreateTopModal()" class="t-accent-bg px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nuevo Top
+          </button>
+        </div>
+
+        <!-- Banner de sincronización rápida si hay portadas pendientes -->
+        <div id="tops-sync-banner" class="hidden t-bg-card border t-border rounded-2xl p-3 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-xl bg-[#1db954]/15 text-[#1db954] flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.72 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+            </div>
+            <p id="tops-sync-banner-text" class="text-xs t-text-muted leading-snug"></p>
+          </div>
+          <button onclick="handleSyncCoversClick()" class="shrink-0 bg-[#1db954] text-black font-bold text-xs px-3 py-2 rounded-xl active:scale-95 transition">
+            Cargar portadas
+          </button>
+        </div>
+
+        <div id="tops-list-container" class="space-y-3"></div>
+      </section>
+
+      <!-- ================= VISTA 1B: EDITOR DE UN TOP ================= -->
+      <section id="view-top-detail" class="hidden space-y-4 animate-fade-up">
+        <!-- Barra de herramientas del Top -->
+        <div class="t-bg-card border t-border rounded-2xl p-3 space-y-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <button onclick="openAddSongToTopModal()" class="t-accent-bg px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Añadir canción
+              </button>
+              <button onclick="openColorRulesModal()" class="t-bg-elevated border t-border px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition">
+                <svg class="w-4 h-4 t-accent-text" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                Colores
+              </button>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button onclick="openEditTopInfoModal()" class="p-2 rounded-xl t-bg-elevated border t-border active:scale-95 transition" title="Editar nombre">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button onclick="confirmDeleteCurrentTop()" class="p-2 rounded-xl t-bg-elevated border t-border text-rose-400 active:scale-95 transition" title="Eliminar Top">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Botón visible para sincronizar portadas faltantes de este Top -->
+          <div id="top-detail-sync-row" class="hidden pt-2 border-t t-border flex items-center justify-between gap-2">
+            <span id="top-detail-sync-label" class="text-[11px] t-text-muted">Algunas canciones aún no tienen portada real.</span>
+            <button id="btn-sync-top-covers" onclick="handleSyncCoversClick({ onlyTopId: currentTopId })" class="bg-[#1db954] text-black font-bold text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0 active:scale-95 transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Cargar portadas de Spotify
+            </button>
+          </div>
+        </div>
+
+        <!-- Leyenda activa de reglas de color -->
+        <div id="top-color-legend" class="flex flex-wrap gap-1.5"></div>
+
+        <!-- Lista de canciones del Top -->
+        <div id="top-tracks-container" class="space-y-2.5"></div>
+      </section>
+
+      <!-- ================= VISTA 2: CARPETAS ================= -->
+      <section id="view-folders" class="hidden space-y-4 animate-fade-up">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider t-text-muted">Biblioteca previa</p>
+            <p id="folders-count-label" class="text-sm t-text-muted">0 carpetas</p>
+          </div>
+          <button onclick="openFolderModal()" class="t-accent-bg px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Nueva Carpeta
+          </button>
+        </div>
+
+        <div id="folders-grid-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </section>
+
+      <!-- ================= VISTA 2B: DETALLE DE CARPETA ================= -->
+      <section id="view-folder-detail" class="hidden space-y-4 animate-fade-up">
+        <div class="t-bg-card border t-border rounded-2xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <button onclick="openAddSongToFolderModal()" class="t-accent-bg px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              Añadir canciones
+            </button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="openFolderModal(currentFolderId)" class="p-2 rounded-xl t-bg-elevated border t-border active:scale-95 transition" title="Editar carpeta">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button onclick="confirmDeleteCurrentFolder()" class="p-2 rounded-xl t-bg-elevated border t-border text-rose-400 active:scale-95 transition" title="Eliminar carpeta">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div id="folder-detail-sync-row" class="hidden pt-2 border-t t-border flex items-center justify-between gap-2">
+            <span class="text-[11px] t-text-muted">Sincroniza las portadas oficiales de esta carpeta.</span>
+            <button onclick="handleSyncCoversClick({ onlyFolderId: currentFolderId })" class="bg-[#1db954] text-black font-bold text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0 active:scale-95 transition">
+              Cargar portadas de Spotify
+            </button>
+          </div>
+        </div>
+
+        <div id="folder-tracks-container" class="space-y-2"></div>
+      </section>
+
+      <!-- ================= VISTA 3: AJUSTES ================= -->
+      <section id="view-settings" class="hidden space-y-5 animate-fade-up">
+
+        <!-- BLOQUE 1: SPOTIFY API -->
+        <div class="t-bg-card border t-border rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold flex items-center gap-2">
+              <svg class="w-5 h-5 text-[#1db954]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.72 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+              Conexión con Spotify (PKCE)
+            </h2>
+            <span id="settings-spotify-badge" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300">Desconectado</span>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-spotify-connect" onclick="startSpotifyLogin()" class="flex-1 bg-[#1db954] text-black font-bold text-xs py-2.5 px-4 rounded-xl active:scale-95 transition">
+              Iniciar sesión con Spotify
+            </button>
+            <button id="btn-spotify-disconnect" onclick="disconnectSpotify()" class="hidden t-bg-elevated border t-border text-rose-400 font-semibold text-xs py-2.5 px-4 rounded-xl active:scale-95 transition">
+              Desconectar
+            </button>
+          </div>
+
+          <button onclick="handleSyncCoversClick()" class="w-full t-bg-elevated border t-border py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition">
+            <svg class="w-4 h-4 text-[#1db954]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Sincronizar portadas faltantes de toda la biblioteca
+          </button>
+
+          <div class="space-y-2 pt-2 border-t t-border">
+            <div>
+              <label class="block text-[11px] font-semibold t-text-muted mb-1">Client ID de Spotify</label>
+              <div class="flex gap-2">
+                <input id="input-client-id" type="text" class="flex-1 t-bg-main border t-border rounded-xl px-3 py-2 text-xs font-mono t-text-main focus:outline-none focus:border-emerald-500" />
+                <button onclick="saveSpotifyClientId()" class="t-bg-elevated border t-border px-3 py-2 rounded-xl text-xs font-semibold active:scale-95 transition">Guardar</button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold t-text-muted mb-1">Redirect URI (copia esto en Spotify Dashboard)</label>
+              <div class="flex gap-2">
+                <input id="input-redirect-uri" type="text" readonly class="flex-1 t-bg-main border t-border rounded-xl px-3 py-2 text-[11px] font-mono t-text-muted focus:outline-none" />
+                <button onclick="copyRedirectUri()" class="t-bg-elevated border t-border px-3 py-2 rounded-xl text-xs font-semibold active:scale-95 transition">Copiar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BLOQUE 2: APARIENCIA Y TEMA CON VISTA PREVIA EN VIVO -->
+        <div class="t-bg-card border t-border rounded-2xl p-4 space-y-4">
+          <h2 class="text-sm font-bold flex items-center gap-2">
+            <svg class="w-5 h-5 t-accent-text" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+            Apariencia y Tema
+          </h2>
+
+          <!-- VISTA PREVIA EN VIVO -->
+          <div class="space-y-1.5">
+            <p class="text-[11px] font-semibold uppercase tracking-wider t-text-muted">Vista previa en vivo</p>
+            <div id="theme-live-preview" class="rounded-2xl p-3 border transition-colors" style="background-color: var(--bg-main); border-color: var(--border-color);">
+              <!-- Mini barra superior -->
+              <div class="flex items-center justify-between mb-2.5 pb-2 border-b" style="border-color: var(--border-color);">
+                <span class="text-xs font-extrabold" style="color: var(--text-main);">Top Cuarteto de Nos</span>
+                <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold" style="background-color: var(--accent); color: #0b0f14;">+ Añadir</span>
+              </div>
+              <!-- Mini tarjeta de canción -->
+              <div class="rounded-xl p-2 flex items-center gap-2.5 border mb-2.5" style="background-color: var(--bg-card); border-color: var(--border-color); border-left: 4px solid #38bdf8;">
+                <span class="text-xs font-black w-5 text-center" style="color: #38bdf8;">#1</span>
+                <div class="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border" style="background-color: var(--bg-main); border-color: var(--border-color); color: var(--accent);">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-xs font-bold truncate" style="color: var(--text-main);">Que Empiece el Juego</div>
+                  <div class="text-[10px] truncate" style="color: var(--text-muted);">El Cuarteto De Nos • Jueves</div>
+                </div>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style="background-color: var(--bg-main); color: var(--text-main);">10</span>
+              </div>
+              <!-- Mini barra de navegación -->
+              <div class="rounded-xl px-3 py-1.5 flex items-center justify-around border text-[10px] font-semibold" style="background-color: var(--bg-card); border-color: var(--border-color);">
+                <span style="color: var(--accent);">● Mis Tops</span>
+                <span style="color: var(--text-muted);">Carpetas</span>
+                <span style="color: var(--text-muted);">Ajustes</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TEMAS PREDEFINIDOS -->
+          <div>
+            <p class="text-[11px] font-semibold t-text-muted mb-2">Temas rápidos</p>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="theme-presets-container"></div>
+          </div>
+
+          <!-- EDITOR LIBRE DE COLORES -->
+          <div class="space-y-2.5 pt-2 border-t t-border">
+            <p class="text-[11px] font-semibold t-text-muted">Personalizar colores de la interfaz</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="theme-custom-inputs"></div>
+          </div>
+        </div>
+
+        <!-- BLOQUE 3: COPIA DE SEGURIDAD JSON -->
+        <div class="t-bg-card border t-border rounded-2xl p-4 space-y-3">
+          <h2 class="text-sm font-bold flex items-center gap-2">
+            <svg class="w-5 h-5 t-accent-text" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Copia de seguridad (JSON)
+          </h2>
+          <p class="text-xs t-text-muted">Todos tus datos se guardan automáticamente en este dispositivo. Exporta un archivo JSON para respaldarlos o pasarlos a otro celular.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button onclick="exportBackupJson()" class="t-bg-elevated border t-border py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition">
+              <svg class="w-4 h-4 t-accent-text" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Exportar (.json)
+            </button>
+            <label class="t-bg-elevated border t-border py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition">
+              <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              Importar (.json)
+              <input id="import-json-input" type="file" accept=".json,application/json" class="hidden" onchange="importBackupJson(event)" />
+            </label>
+          </div>
+          <div class="pt-2 border-t t-border">
+            <button onclick="confirmFactoryReset()" class="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 active:scale-95 transition">
+              Reiniciar datos de fábrica
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- BARRA DE NAVEGACIÓN INFERIOR FIJA -->
+    <nav class="fixed bottom-0 left-0 right-0 z-30 t-bg-card/95 backdrop-blur-md border-t t-border nav-safe-bottom">
+      <div class="max-w-xl mx-auto grid grid-cols-3 h-16">
+        <button onclick="switchMainTab('tops')" id="nav-tops" class="flex flex-col items-center justify-center gap-1 text-xs font-semibold transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+          <span>Mis Tops</span>
+        </button>
+        <button onclick="switchMainTab('folders')" id="nav-folders" class="flex flex-col items-center justify-center gap-1 text-xs font-semibold transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+          <span>Carpetas</span>
+        </button>
+        <button onclick="switchMainTab('settings')" id="nav-settings" class="flex flex-col items-center justify-center gap-1 text-xs font-semibold transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>Ajustes</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- MODAL GENÉRICO REUTILIZABLE -->
+  <div id="modal-backdrop" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target === this) closeTopModal()">
+    <div id="modal-panel" class="w-full max-w-lg t-bg-card border-t sm:border t-border rounded-t-3xl sm:rounded-3xl max-h-[88dvh] flex flex-col overflow-hidden animate-modal">
+      <div class="px-5 py-4 border-b t-border flex items-center justify-between shrink-0">
+        <h3 id="modal-title" class="text-base font-extrabold">Título</h3>
+        <button onclick="closeTopModal()" class="p-1.5 rounded-xl hover:bg-white/10 active:scale-95 transition" aria-label="Cerrar">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modal-body" class="p-5 overflow-y-auto flex-1 space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- TOAST DE NOTIFICACIONES -->
+  <div id="toast-container" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] pointer-events-none w-[90%] max-w-sm flex flex-col items-center gap-2"></div>
+
+  <script>
+    // =========================================================================
+    // 1. CONSTANTES, ESTADO GLOBAL Y DATOS DE REFERENCIA
+    // =========================================================================
+    const STORAGE_KEY = "topify_app_data_v2";
+    const DEFAULT_CLIENT_ID = "9b28d325cf6b49f6b389b6808ca1b7f0";
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const SPOTIFY_SCOPES = "user-read-recently-played playlist-read-private user-library-read";
+
+    const QUICK_PALETTE = [
+      "#38bdf8", "#facc15", "#22c55e", "#f43f5e", "#a855f7",
+      "#fb923c", "#14b8a6", "#ec4899", "#6366f1", "#e2e8f0"
+    ];
+
+    const THEME_PRESETS = [
+      {
+        id: "spotify-dark",
+        name: "Spotify Dark",
+        colors: {
+          "--bg-main": "#0f1115",
+          "--bg-card": "#181c24",
+          "--bg-elevated": "#222834",
+          "--accent": "#1db954",
+          "--text-main": "#f8fafc",
+          "--text-muted": "#94a3b8",
+          "--border-color": "#2a3140"
+        }
+      },
+      {
+        id: "midnight-blue",
+        name: "Midnight Blue",
+        colors: {
+          "--bg-main": "#0b1120",
+          "--bg-card": "#131c31",
+          "--bg-elevated": "#1d2a47",
+          "--accent": "#38bdf8",
+          "--text-main": "#f1f5f9",
+          "--text-muted": "#94a3b8",
+          "--border-color": "#243456"
+        }
+      },
+      {
+        id: "amoled",
+        name: "AMOLED Negro",
+        colors: {
+          "--bg-main": "#000000",
+          "--bg-card": "#0d0d10",
+          "--bg-elevated": "#18181f",
+          "--accent": "#22c55e",
+          "--text-main": "#ffffff",
+          "--text-muted": "#8e8e93",
+          "--border-color": "#22222a"
+        }
+      },
+      {
+        id: "light-min",
+        name: "Claro Minimalista",
+        colors: {
+          "--bg-main": "#f4f6f9",
+          "--bg-card": "#ffffff",
+          "--bg-elevated": "#eef2f6",
+          "--accent": "#10b981",
+          "--text-main": "#0f172a",
+          "--text-muted": "#64748b",
+          "--border-color": "#dce3ec"
+        }
+      },
+      {
+        id: "sunset",
+        name: "Sunset",
+        colors: {
+          "--bg-main": "#18101c",
+          "--bg-card": "#24172b",
+          "--bg-elevated": "#32203b",
+          "--accent": "#fb7185",
+          "--text-main": "#fdf4ff",
+          "--text-muted": "#c4a8d1",
+          "--border-color": "#412a4d"
+        }
+      }
+    ];
+
+    // Datos iniciales basados en la hoja de cálculo del usuario (sin portadas hasta conectar Spotify)
+    function createDefaultData() {
+      const cuartetoTracks = [
+        { id: "c1", name: "Que Empiece el Juego", artist: "El Cuarteto De Nos", album: "Jueves", cover: "", score: "10" },
+        { id: "c2", name: "Maldito Show", artist: "El Cuarteto De Nos", album: "Lámina Once", cover: "", score: "10" },
+        { id: "c3", name: "Invisible", artist: "El Cuarteto De Nos", album: "Apocalipsis Zombi", cover: "", score: "10" },
+        { id: "c4", name: "En el Cuarto de Nico", artist: "El Cuarteto De Nos", album: "Puertas", cover: "", score: "10" },
+        { id: "c5", name: "Anónimo", artist: "El Cuarteto De Nos", album: "Jueves", cover: "", score: "10" },
+        { id: "c6", name: "Cómo Pasa el Tiempo", artist: "El Cuarteto De Nos", album: "Habla tu Espejo", cover: "", score: "10" },
+        { id: "c7", name: "Flan", artist: "El Cuarteto De Nos", album: "Lámina Once", cover: "", score: "9.8" },
+        { id: "c8", name: "Ganaron los Malos", artist: "El Cuarteto De Nos", album: "Puertas", cover: "", score: "9.9" },
+        { id: "c9", name: "Hombre con Alas", artist: "El Cuarteto De Nos", album: "Jueves", cover: "", score: "9.7" },
+        { id: "c10", name: "Punta Cana", artist: "El Cuarteto De Nos", album: "Jueves", cover: "", score: "9.61" },
+        { id: "c11", name: "Mario Neta", artist: "El Cuarteto De Nos", album: "Jueves", cover: "", score: "9.64" },
+        { id: "c12", name: "Cara de Nada", artist: "El Cuarteto De Nos", album: "Puertas", cover: "", score: "9.6" }
+      ];
+
+      return {
+        spotifyClientId: DEFAULT_CLIENT_ID,
+        theme: { ...THEME_PRESETS[0].colors },
+        tops: [
+          {
+            id: "top_cuarteto_demo",
+            title: "Top Cuarteto de Nos",
+            updatedAt: Date.now(),
+            colorStyle: "left-bar",
+            colorRules: [
+              { id: "r1", from: 1, to: 1, color: "#38bdf8" },
+              { id: "r2", from: 2, to: 5, color: "#facc15" },
+              { id: "r3", from: 6, to: 10, color: "#22c55e" }
+            ],
+            tracks: cuartetoTracks
+          }
+        ],
+        folders: [
+          {
+            id: "folder_cuarteto",
+            name: "Cuarteto de Nos",
+            color: "#38bdf8",
+            tracks: [
+              ...cuartetoTracks.slice(0, 6).map(t => ({ id: t.id, name: t.name, artist: t.artist, album: t.album, cover: t.cover })),
+              { id: "c13", name: "Insaciable", artist: "El Cuarteto De Nos", album: "Porfiado", cover: "" },
+              { id: "c14", name: "El Aprendiz", artist: "El Cuarteto De Nos", album: "Habla tu Espejo", cover: "" },
+              { id: "c15", name: "Rorschach", artist: "El Cuarteto De Nos", album: "Lámina Once", cover: "" },
+              { id: "c16", name: "Yendo a la Casa de Damián", artist: "El Cuarteto De Nos", album: "Raro", cover: "" }
+            ]
+          }
+        ]
+      };
+    }
+
+    let appData = loadData();
+    let spotifyToken = localStorage.getItem("topify_spotify_token") || null;
+    let recentTracksCache = [];
+    let isSyncingCovers = false;
+
+    // Estado de navegación
+    let currentTab = "tops"; // 'tops' | 'folders' | 'settings'
+    let currentTopId = null;
+    let currentFolderId = null;
+    let isModalOpen = false;
+    let lastBackPressTime = 0;
+
+    function loadData() {
+      try {
+        // Migración suave si existía v1
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("topify_app_data_v1");
+        if (!raw) return createDefaultData();
+        const parsed = JSON.parse(raw);
+        if (!parsed.tops || !parsed.folders) return createDefaultData();
+        return {
+          spotifyClientId: parsed.spotifyClientId || DEFAULT_CLIENT_ID,
+          theme: parsed.theme || { ...THEME_PRESETS[0].colors },
+          tops: parsed.tops,
+          folders: parsed.folders
+        };
+      } catch (e) {
+        return createDefaultData();
+      }
+    }
+
+    function saveData() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+      } catch (e) {
+        showToast("Error al guardar en almacenamiento local", "error");
+      }
+    }
+
+    // =========================================================================
+    // 2. UTILIDADES VISUALES (SIN ABREVIATURAS DE TEXTO NI EMOJIS)
+    // =========================================================================
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toast-container");
+      const el = document.createElement("div");
+      const bg = type === "error"
+        ? "bg-rose-600 text-white"
+        : type === "success"
+          ? "bg-emerald-600 text-white"
+          : "t-bg-elevated t-text-main border t-border";
+      el.className = `${bg} px-4 py-2.5 rounded-2xl text-xs font-semibold shadow-xl animate-fade-up text-center`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = "0";
+        el.style.transition = "opacity 0.25s";
+        setTimeout(() => el.remove(), 260);
+      }, 2500);
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts || Date.now());
+      return d.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+    }
+
+    /**
+     * Portada de canción:
+     * - Muestra la imagen real de Spotify si existe.
+     * - Si aún no tiene portada (o falla la carga), muestra un SVG minimalista de vinilo/nota musical (nunca letras).
+     */
+    function getCoverHtml(coverUrl, sizeClass = "w-11 h-11") {
+      const fallbackSvg = `
+        <svg class="w-5 h-5 t-text-muted opacity-75" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" stroke-opacity="0.45"></circle>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 15V9.5l5-1.2V13.8"></path>
+          <circle cx="8.5" cy="15" r="1.5" fill="currentColor"></circle>
+          <circle cx="13.5" cy="13.8" r="1.5" fill="currentColor"></circle>
+        </svg>
+      `;
+
+      if (coverUrl) {
+        return `
+          <div class="${sizeClass} rounded-xl overflow-hidden shrink-0 t-bg-elevated border t-border relative flex items-center justify-center">
+            <img src="${escapeHtml(coverUrl)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div style="display:none" class="w-full h-full items-center justify-center">${fallbackSvg}</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="${sizeClass} rounded-xl shrink-0 t-bg-elevated border t-border flex items-center justify-center">
+          ${fallbackSvg}
+        </div>
+      `;
+    }
+
+    /**
+     * Miniatura de carpeta estilo Spotify:
+     * - 4+ portadas reales -> Collage 2x2
+     * - 1 a 3 portadas reales -> Portada única
+     * - Sin portadas / vacía -> Ícono SVG minimalista de carpeta
+     */
+    function getFolderThumbHtml(folder, sizeClass = "w-12 h-12") {
+      const covers = (folder.tracks || []).filter(t => t.cover).map(t => t.cover);
+      const uniqueCovers = [...new Set(covers)].slice(0, 4);
+      const accentColor = folder.color || "#38bdf8";
+
+      if (uniqueCovers.length >= 4) {
+        return `
+          <div class="${sizeClass} rounded-xl overflow-hidden shrink-0 grid grid-cols-2 grid-rows-2 bg-black/30 border t-border">
+            ${uniqueCovers.map(url => `<img src="${escapeHtml(url)}" alt="" loading="lazy" class="w-full h-full object-cover" />`).join("")}
+          </div>
+        `;
+      }
+
+      if (uniqueCovers.length >= 1) {
+        return `
+          <div class="${sizeClass} rounded-xl overflow-hidden shrink-0 bg-black/30 border t-border">
+            <img src="${escapeHtml(uniqueCovers[0])}" alt="" loading="lazy" class="w-full h-full object-cover" />
+          </div>
+        `;
+      }
+
+      return `
+        <div class="${sizeClass} rounded-xl shrink-0 flex items-center justify-center border t-border" style="background-color: ${accentColor}1f; color: ${accentColor};">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+          </svg>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 3. GESTIÓN DE HISTORIAL Y BOTÓN "ATRÁS" DEL CELULAR
+    // =========================================================================
+    function initHistoryGuard() {
+      history.replaceState({ view: "root" }, "", window.location.pathname + window.location.search);
+      history.pushState({ view: "tab", tab: "tops" }, "");
+
+      window.addEventListener("popstate", (e) => {
+        if (isModalOpen) {
+          hideModalDom();
+          return;
+        }
+
+        const state = e.state;
+
+        if (!state || state.view === "root") {
+          const now = Date.now();
+          if (now - lastBackPressTime < 2200) {
+            return;
+          }
+          lastBackPressTime = now;
+          history.pushState({ view: "tab", tab: currentTab }, "");
+          if (currentTopId || currentFolderId) {
+            currentTopId = null;
+            currentFolderId = null;
+            renderCurrentView();
+          } else if (currentTab !== "tops") {
+            currentTab = "tops";
+            renderCurrentView();
+          } else {
+            showToast("Toca atrás otra vez para salir");
+          }
+          return;
+        }
+
+        if (state.view === "tab") {
+          currentTab = state.tab || "tops";
+          currentTopId = null;
+          currentFolderId = null;
+        } else if (state.view === "top-detail") {
+          currentTab = "tops";
+          currentTopId = state.id;
+          currentFolderId = null;
+        } else if (state.view === "folder-detail") {
+          currentTab = "folders";
+          currentFolderId = state.id;
+          currentTopId = null;
+        }
+        renderCurrentView();
+      });
+    }
+
+    function navigateTo(stateObj) {
+      history.pushState(stateObj, "");
+    }
+
+    document.getElementById("header-back-btn").addEventListener("click", () => {
+      history.back();
+    });
+
+    function switchMainTab(tab) {
+      if (currentTab === tab && !currentTopId && !currentFolderId) return;
+      currentTab = tab;
+      currentTopId = null;
+      currentFolderId = null;
+      navigateTo({ view: "tab", tab });
+      renderCurrentView();
+    }
+
+    function openTopDetail(topId) {
+      currentTab = "tops";
+      currentTopId = topId;
+      currentFolderId = null;
+      navigateTo({ view: "top-detail", id: topId });
+      renderCurrentView();
+    }
+
+    function openFolderDetail(folderId) {
+      currentTab = "folders";
+      currentFolderId = folderId;
+      currentTopId = null;
+      navigateTo({ view: "folder-detail", id: folderId });
+      renderCurrentView();
+    }
+
+    // =========================================================================
+    // 4. MODALES INTEGRADOS CON EL HISTORIAL
+    // =========================================================================
+    function openModal(title, htmlContent) {
+      document.getElementById("modal-title").textContent = title;
+      document.getElementById("modal-body").innerHTML = htmlContent;
+      document.getElementById("modal-backdrop").classList.remove("hidden");
+      if (!isModalOpen) {
+        isModalOpen = true;
+        navigateTo({ view: "modal" });
+      }
+    }
+
+    function hideModalDom() {
+      document.getElementById("modal-backdrop").classList.add("hidden");
+      isModalOpen = false;
+    }
+
+    function closeTopModal() {
+      if (isModalOpen) {
+        history.back();
+      }
+    }
+
+    // =========================================================================
+    // 5. INTEGRACIÓN SPOTIFY API (PKCE OAUTH 2.0) Y SINCRONIZACIÓN DE PORTADAS
+    // =========================================================================
+    function generateRandomString(len) {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+      return Array.from({ length: len }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
+    }
+
+    async function generateCodeChallenge(verifier) {
+      const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+      return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/=/g, "")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_");
+    }
+
+    async function startSpotifyLogin() {
+      const clientId = (appData.spotifyClientId || DEFAULT_CLIENT_ID).trim();
+      if (!clientId) {
+        showToast("Configura un Client ID en Ajustes", "error");
+        return;
+      }
+      const verifier = generateRandomString(128);
+      const challenge = await generateCodeChallenge(verifier);
+      sessionStorage.setItem("topify_spotify_verifier", verifier);
+      localStorage.setItem("topify_spotify_verifier", verifier);
+
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        redirect_uri: REDIRECT_URI,
+        scope: SPOTIFY_SCOPES,
+        code_challenge_method: "S256",
+        code_challenge: challenge
+      });
+      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+    }
+
+    async function checkSpotifyRedirect() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("code");
+      const verifier = sessionStorage.getItem("topify_spotify_verifier") || localStorage.getItem("topify_spotify_verifier");
+      if (!code || !verifier) return false;
+
+      try {
+        const res = await fetch("https://accounts.spotify.com/api/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: appData.spotifyClientId || DEFAULT_CLIENT_ID,
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: REDIRECT_URI,
+            code_verifier: verifier
+          })
+        });
+        const data = await res.json();
+        if (data.access_token) {
+          spotifyToken = data.access_token;
+          localStorage.setItem("topify_spotify_token", spotifyToken);
+          showToast("¡Conectado con Spotify! Cargando portadas...", "success");
+          fetchRecentlyPlayed();
+          return true;
+        } else {
+          showToast("No se pudo autenticar con Spotify", "error");
+          return false;
+        }
+      } catch (err) {
+        showToast("Error de red al conectar con Spotify", "error");
+        return false;
+      } finally {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        updateSpotifyStatusUI();
+      }
+    }
+
+    function disconnectSpotify() {
+      spotifyToken = null;
+      recentTracksCache = [];
+      localStorage.removeItem("topify_spotify_token");
+      updateSpotifyStatusUI();
+      showToast("Sesión de Spotify cerrada");
+    }
+
+    function handleSpotifyPillClick() {
+      if (spotifyToken) {
+        switchMainTab("settings");
+      } else {
+        startSpotifyLogin();
+      }
+    }
+
+    function updateSpotifyStatusUI() {
+      const dot = document.getElementById("spotify-dot");
+      const pillText = document.getElementById("spotify-pill-text");
+      const badge = document.getElementById("settings-spotify-badge");
+      const btnConnect = document.getElementById("btn-spotify-connect");
+      const btnDisconnect = document.getElementById("btn-spotify-disconnect");
+
+      if (spotifyToken) {
+        dot.className = "w-2 h-2 rounded-full bg-[#1db954]";
+        pillText.textContent = "Spotify OK";
+        if (badge) {
+          badge.textContent = "Conectado";
+          badge.className = "text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300";
+        }
+        if (btnConnect) btnConnect.textContent = "Reconectar Spotify";
+        if (btnDisconnect) btnDisconnect.classList.remove("hidden");
+      } else {
+        dot.className = "w-2 h-2 rounded-full bg-amber-400";
+        pillText.textContent = "Conectar";
+        if (badge) {
+          badge.textContent = "Desconectado";
+          badge.className = "text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300";
+        }
+        if (btnConnect) btnConnect.textContent = "Iniciar sesión con Spotify";
+        if (btnDisconnect) btnDisconnect.classList.add("hidden");
+      }
+    }
+
+    async function fetchRecentlyPlayed() {
+      if (!spotifyToken) return [];
+      try {
+        const res = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=25", {
+          headers: { Authorization: `Bearer ${spotifyToken}` }
+        });
+        if (res.status === 401) {
+          disconnectSpotify();
+          showToast("Token de Spotify expirado. Vuelve a conectar.", "error");
+          return [];
+        }
+        if (!res.ok) return [];
+        const data = await res.json();
+        const seen = new Set();
+        const tracks = [];
+        (data.items || []).forEach(item => {
+          const t = item.track;
+          if (t && !seen.has(t.id)) {
+            seen.add(t.id);
+            tracks.push({
+              id: t.id,
+              name: t.name,
+              artist: (t.artists || []).map(a => a.name).join(", "),
+              album: t.album?.name || "",
+              cover: t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || ""
+            });
+          }
+        });
+        recentTracksCache = tracks;
+        return tracks;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    async function searchSpotifyTracks(query, limit = 12) {
+      if (!spotifyToken || !query.trim()) return [];
+      try {
+        const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query.trim())}&type=track&limit=${limit}`, {
+          headers: { Authorization: `Bearer ${spotifyToken}` }
+        });
+        if (res.status === 401) {
+          disconnectSpotify();
+          showToast("Sesión de Spotify expirada. Reconecta en Ajustes.", "error");
+          return null;
+        }
+        if (!res.ok) return [];
+        const data = await res.json();
+        return (data.tracks?.items || []).map(t => ({
+          id: t.id,
+          name: t.name,
+          artist: (t.artists || []).map(a => a.name).join(", "),
+          album: t.album?.name || "",
+          cover: t.album?.images?.[1]?.url || t.album?.images?.[0]?.url || ""
+        }));
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function countMissingCovers(options = {}) {
+      let count = 0;
+      if (options.onlyTopId) {
+        const top = appData.tops.find(t => t.id === options.onlyTopId);
+        return top ? top.tracks.filter(t => !t.cover).length : 0;
+      }
+      if (options.onlyFolderId) {
+        const folder = appData.folders.find(f => f.id === options.onlyFolderId);
+        return folder ? folder.tracks.filter(t => !t.cover).length : 0;
+      }
+      appData.tops.forEach(top => { count += top.tracks.filter(t => !t.cover).length; });
+      appData.folders.forEach(folder => { count += folder.tracks.filter(t => !t.cover).length; });
+      return count;
+    }
+
+    async function handleSyncCoversClick(options = {}) {
+      if (!spotifyToken) {
+        showToast("Inicia sesión en Spotify para cargar las portadas reales", "info");
+        startSpotifyLogin();
+        return;
+      }
+      await syncMissingSpotifyCovers({ silent: false, ...options });
+    }
+
+    /**
+     * Busca en la API real de Spotify las canciones que aún no tienen portada
+     * y actualiza cover, álbum oficial y artista en Tops y Carpetas.
+     */
+    async function syncMissingSpotifyCovers({ silent = false, onlyTopId = null, onlyFolderId = null } = {}) {
+      if (!spotifyToken || isSyncingCovers) return;
+
+      const targetLists = [];
+      if (onlyTopId) {
+        const top = appData.tops.find(t => t.id === onlyTopId);
+        if (top) targetLists.push(top.tracks);
+      } else if (onlyFolderId) {
+        const folder = appData.folders.find(f => f.id === onlyFolderId);
+        if (folder) targetLists.push(folder.tracks);
+      } else {
+        appData.tops.forEach(t => targetLists.push(t.tracks));
+        appData.folders.forEach(f => targetLists.push(f.tracks));
+      }
+
+      // Agrupar canciones sin portada por clave única para evitar consultas duplicadas
+      const missingMap = new Map();
+      targetLists.forEach(list => {
+        list.forEach(track => {
+          if (!track.cover && track.name) {
+            const key = `${track.name.trim().toLowerCase()}|${(track.artist || "").trim().toLowerCase()}`;
+            if (!missingMap.has(key)) {
+              missingMap.set(key, { sample: track, refs: [] });
+            }
+            missingMap.get(key).refs.push(track);
+          }
+        });
+      });
+
+      if (missingMap.size === 0) {
+        if (!silent) showToast("Todas las canciones ya tienen portada real", "success");
+        return;
+      }
+
+      isSyncingCovers = true;
+      if (!silent) showToast(`Sincronizando ${missingMap.size} portadas con Spotify...`);
+
+      let updatedCount = 0;
+      let tokenExpired = false;
+
+      for (const [, entry] of missingMap.entries()) {
+        const { sample, refs } = entry;
+        // Consulta precisa por nombre + artista
+        const primaryQuery = [sample.name, sample.artist].filter(Boolean).join(" ");
+        let results = await searchSpotifyTracks(primaryQuery, 1);
+
+        if (results === null) {
+          tokenExpired = true;
+          break;
+        }
+
+        // Segundo intento solo con nombre + álbum si el primero no devolvió resultado
+        if (results.length === 0 && sample.album) {
+          results = await searchSpotifyTracks(`${sample.name} ${sample.album}`, 1);
+          if (results === null) {
+            tokenExpired = true;
+            break;
+          }
+        }
+
+        if (results && results.length > 0) {
+          const match = results[0];
+          if (match.cover) {
+            // Actualizar todas las coincidencias en Tops y Carpetas
+            const applyMatch = (t) => {
+              t.cover = match.cover;
+              if (match.album) t.album = match.album;
+              if (match.artist) t.artist = match.artist;
+              t.spotifyId = match.id;
+            };
+            refs.forEach(applyMatch);
+
+            // También actualizar copias de la misma canción en otras listas
+            const matchNameLow = sample.name.trim().toLowerCase();
+            appData.tops.forEach(top => top.tracks.forEach(t => {
+              if (!t.cover && t.name.trim().toLowerCase() === matchNameLow) applyMatch(t);
+            }));
+            appData.folders.forEach(f => f.tracks.forEach(t => {
+              if (!t.cover && t.name.trim().toLowerCase() === matchNameLow) applyMatch(t);
+            }));
+
+            updatedCount++;
+            saveData();
+            renderCurrentView();
+          }
+        }
+      }
+
+      isSyncingCovers = false;
+
+      if (!tokenExpired) {
+        saveData();
+        renderCurrentView();
+        if (updatedCount > 0) {
+          showToast(`¡${updatedCount} portada${updatedCount === 1 ? "" : "s"} cargada${updatedCount === 1 ? "" : "s"} desde Spotify!`, "success");
+        } else if (!silent) {
+          showToast("No se encontraron portadas nuevas en Spotify", "info");
+        }
+      }
+    }
+
+    // =========================================================================
+    // 6. RENDERIZADO GENERAL DE VISTAS
+    // =========================================================================
+    function renderCurrentView() {
+      const views = ["view-tops", "view-top-detail", "view-folders", "view-folder-detail", "view-settings"];
+      views.forEach(id => document.getElementById(id).classList.add("hidden"));
+
+      const backBtn = document.getElementById("header-back-btn");
+      const titleEl = document.getElementById("header-title");
+      const subEl = document.getElementById("header-subtitle");
+      subEl.classList.add("hidden");
+      backBtn.classList.add("hidden");
+
+      ["tops", "folders", "settings"].forEach(t => {
+        const btn = document.getElementById(`nav-${t}`);
+        if (t === currentTab) {
+          btn.classList.add("t-accent-text");
+          btn.classList.remove("t-text-muted");
+        } else {
+          btn.classList.remove("t-accent-text");
+          btn.classList.add("t-text-muted");
+        }
+      });
+
+      if (currentTopId) {
+        const top = appData.tops.find(t => t.id === currentTopId);
+        if (!top) {
+          currentTopId = null;
+          renderCurrentView();
+          return;
+        }
+        backBtn.classList.remove("hidden");
+        titleEl.textContent = top.title;
+        subEl.textContent = `${top.tracks.length} canciones • Act. ${formatDate(top.updatedAt)}`;
+        subEl.classList.remove("hidden");
+        document.getElementById("view-top-detail").classList.remove("hidden");
+        renderTopDetail(top);
+      } else if (currentFolderId) {
+        const folder = appData.folders.find(f => f.id === currentFolderId);
+        if (!folder) {
+          currentFolderId = null;
+          renderCurrentView();
+          return;
+        }
+        backBtn.classList.remove("hidden");
+        titleEl.textContent = folder.name;
+        subEl.textContent = `${folder.tracks.length} canciones guardadas`;
+        subEl.classList.remove("hidden");
+        document.getElementById("view-folder-detail").classList.remove("hidden");
+        renderFolderDetail(folder);
+      } else if (currentTab === "tops") {
+        titleEl.textContent = "Mis Tops";
+        document.getElementById("view-tops").classList.remove("hidden");
+        renderTopsList();
+      } else if (currentTab === "folders") {
+        titleEl.textContent = "Carpetas";
+        document.getElementById("view-folders").classList.remove("hidden");
+        renderFoldersGrid();
+      } else if (currentTab === "settings") {
+        titleEl.textContent = "Ajustes";
+        document.getElementById("view-settings").classList.remove("hidden");
+        renderSettingsView();
+      }
+    }
+
+    // =========================================================================
+    // 7. VISTAS: MIS TOPS Y DETALLE DE TOP (CON DRAG & DROP TÁCTIL)
+    // =========================================================================
+    function renderTopsList() {
+      const container = document.getElementById("tops-list-container");
+      document.getElementById("tops-count-label").textContent = `${appData.tops.length} lista${appData.tops.length === 1 ? "" : "s"} creada${appData.tops.length === 1 ? "" : "s"}`;
+
+      // Banner de portadas pendientes
+      const missingTotal = countMissingCovers();
+      const syncBanner = document.getElementById("tops-sync-banner");
+      if (missingTotal > 0) {
+        syncBanner.classList.remove("hidden");
+        document.getElementById("tops-sync-banner-text").textContent = spotifyToken
+          ? `Hay ${missingTotal} canción${missingTotal === 1 ? "" : "es"} sin portada oficial de Spotify.`
+          : `Conecta Spotify para cargar automáticamente las portadas reales de tus ${missingTotal} canciones.`;
+      } else {
+        syncBanner.classList.add("hidden");
+      }
+
+      if (appData.tops.length === 0) {
+        container.innerHTML = `
+          <div class="t-bg-card border t-border rounded-3xl p-8 text-center space-y-2">
+            <div class="w-12 h-12 rounded-2xl t-bg-elevated border t-border mx-auto flex items-center justify-center t-accent-text">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+            </div>
+            <p class="font-bold text-sm">Todavía no tienes Tops</p>
+            <p class="text-xs t-text-muted">Crea tu primer Top para empezar a ordenar tus canciones favoritas.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = appData.tops.map(top => {
+        const previewTracks = top.tracks.slice(0, 3);
+        const miniCovers = previewTracks.map(t => getCoverHtml(t.cover, "w-9 h-9")).join("");
+        return `
+          <div onclick="openTopDetail('${top.id}')" class="t-bg-card border t-border rounded-2xl p-4 cursor-pointer active:scale-[0.99] transition hover:border-white/20">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <h3 class="font-extrabold text-base truncate">${escapeHtml(top.title)}</h3>
+                <p class="text-xs t-text-muted mt-0.5">${top.tracks.length} canciones • ${formatDate(top.updatedAt)}</p>
+              </div>
+              <div class="flex items-center -space-x-2 shrink-0">${miniCovers || '<span class="text-xs t-text-muted">Vacío</span>'}</div>
+            </div>
+            ${previewTracks.length > 0 ? `
+              <div class="mt-3 pt-2.5 border-t t-border space-y-1">
+                ${previewTracks.map((t, idx) => `
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="font-bold w-5 t-accent-text">#${idx + 1}</span>
+                    <span class="truncate flex-1 font-medium">${escapeHtml(t.name)}</span>
+                    <span class="t-text-muted truncate max-w-[115px] text-[11px]">${escapeHtml(t.album || t.artist)}</span>
+                  </div>
+                `).join("")}
+              </div>` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function getRuleColorForRank(top, rank) {
+      if (!top.colorRules) return null;
+      const rule = top.colorRules.find(r => rank >= r.from && rank <= r.to);
+      return rule ? rule.color : null;
+    }
+
+    function renderTopDetail(top) {
+      // Fila de sincronización de portadas faltantes dentro del Top
+      const missingInTop = top.tracks.filter(t => !t.cover).length;
+      const syncRow = document.getElementById("top-detail-sync-row");
+      if (missingInTop > 0) {
+        syncRow.classList.remove("hidden");
+        document.getElementById("top-detail-sync-label").textContent = `${missingInTop} canción${missingInTop === 1 ? "" : "es"} sin portada real.`;
+      } else {
+        syncRow.classList.add("hidden");
+      }
+
+      // Leyenda de reglas de color
+      const legendEl = document.getElementById("top-color-legend");
+      if (top.colorRules && top.colorRules.length > 0) {
+        legendEl.innerHTML = top.colorRules.map(r => `
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold t-bg-card border t-border">
+            <span class="w-2.5 h-2.5 rounded-full" style="background:${r.color}"></span>
+            ${r.from === r.to ? `Top ${r.from}` : `Top ${r.from}-${r.to}`}
+          </span>
+        `).join("");
+      } else {
+        legendEl.innerHTML = "";
+      }
+
+      const container = document.getElementById("top-tracks-container");
+      if (top.tracks.length === 0) {
+        container.innerHTML = `
+          <div class="t-bg-card border t-border rounded-3xl p-8 text-center space-y-2">
+            <div class="w-12 h-12 rounded-2xl t-bg-elevated border t-border mx-auto flex items-center justify-center t-accent-text">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+            </div>
+            <p class="font-bold text-sm">Este Top está vacío</p>
+            <p class="text-xs t-text-muted">Toca "+ Añadir canción" para buscar en Spotify o elegir desde tus carpetas.</p>
+          </div>`;
+        return;
+      }
+
+      const styleMode = top.colorStyle || "left-bar";
+
+      container.innerHTML = top.tracks.map((track, idx) => {
+        const rank = idx + 1;
+        const ruleColor = getRuleColorForRank(top, rank);
+
+        let cardStyle = "";
+        let numberStyle = "";
+        if (ruleColor) {
+          if (styleMode === "left-bar") {
+            cardStyle = `border-left: 5px solid ${ruleColor};`;
+          } else if (styleMode === "full-border") {
+            cardStyle = `border: 2px solid ${ruleColor};`;
+          } else if (styleMode === "bar-number") {
+            cardStyle = `border-left: 5px solid ${ruleColor};`;
+            numberStyle = `color: ${ruleColor};`;
+          }
+        }
+
+        return `
+          <div data-track-idx="${idx}" class="top-track-card t-bg-card border t-border rounded-2xl p-2.5 flex items-center gap-2 transition-transform" style="${cardStyle}">
+            <!-- Handle para arrastrar (táctil y mouse) -->
+            <div class="drag-handle p-1 -ml-0.5 t-text-muted opacity-60 hover:opacity-100 shrink-0" title="Arrastrar para reordenar" onpointerdown="startTrackDrag(event, ${idx})">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <circle cx="7" cy="5" r="1.4"/><circle cx="13" cy="5" r="1.4"/>
+                <circle cx="7" cy="10" r="1.4"/><circle cx="13" cy="10" r="1.4"/>
+                <circle cx="7" cy="15" r="1.4"/><circle cx="13" cy="15" r="1.4"/>
+              </svg>
+            </div>
+
+            <!-- Número de puesto (tocar para mover o quitar) -->
+            <button onclick="openMovePositionModal(${idx})" class="w-7 shrink-0 text-center font-black text-sm active:scale-90 transition" style="${numberStyle}" title="Mover o quitar">
+              #${rank}
+            </button>
+
+            <!-- Portada real de Spotify o vinilo SVG -->
+            ${getCoverHtml(track.cover, "w-11 h-11")}
+
+            <!-- Info de la canción -->
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-sm truncate">${escapeHtml(track.name)}</div>
+              <div class="text-xs t-text-muted truncate">${escapeHtml(track.artist)}${track.album ? ` • ${escapeHtml(track.album)}` : ""}</div>
+            </div>
+
+            <!-- Puntaje opcional -->
+            <button onclick="openEditScoreModal(${idx})" class="px-2 py-1 rounded-lg t-bg-elevated border t-border text-[11px] font-bold shrink-0 active:scale-95 transition" title="Editar puntaje">
+              ${track.score ? escapeHtml(track.score) : "★"}
+            </button>
+
+            <!-- Controles rápidos subir/bajar -->
+            <div class="flex flex-col gap-1 shrink-0">
+              <button onclick="moveTrackInTop(${idx}, -1)" ${idx === 0 ? "disabled" : ""} class="p-1 rounded-lg t-bg-elevated border t-border disabled:opacity-25 active:scale-90 transition" aria-label="Subir">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+              </button>
+              <button onclick="moveTrackInTop(${idx}, 1)" ${idx === top.tracks.length - 1 ? "disabled" : ""} class="p-1 rounded-lg t-bg-elevated border t-border disabled:opacity-25 active:scale-90 transition" aria-label="Bajar">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Drag & Drop táctil y mouse mediante Pointer Events
+    let dragState = null;
+
+    function startTrackDrag(e, startIdx) {
+      e.preventDefault();
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+
+      const container = document.getElementById("top-tracks-container");
+      const cards = Array.from(container.querySelectorAll(".top-track-card"));
+      const draggedCard = cards[startIdx];
+      if (!draggedCard) return;
+
+      draggedCard.classList.add("dragging-card");
+      dragState = { currentIdx: startIdx, pointerId: e.pointerId };
+
+      const onPointerMove = (moveEvent) => {
+        if (!dragState) return;
+        const y = moveEvent.clientY;
+        const currentCards = Array.from(container.querySelectorAll(".top-track-card"));
+        let targetIdx = dragState.currentIdx;
+
+        for (let i = 0; i < currentCards.length; i++) {
+          const rect = currentCards[i].getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          if (i < dragState.currentIdx && y < midY) {
+            targetIdx = i;
+            break;
+          }
+          if (i > dragState.currentIdx && y > midY) {
+            targetIdx = i;
+          }
+        }
+
+        if (targetIdx !== dragState.currentIdx) {
+          const [moved] = top.tracks.splice(dragState.currentIdx, 1);
+          top.tracks.splice(targetIdx, 0, moved);
+          dragState.currentIdx = targetIdx;
+          renderTopDetail(top);
+          const refreshed = container.querySelectorAll(".top-track-card")[targetIdx];
+          if (refreshed) refreshed.classList.add("dragging-card");
+        }
+      };
+
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        if (dragState) {
+          dragState = null;
+          top.updatedAt = Date.now();
+          saveData();
+          renderTopDetail(top);
+        }
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    }
+
+    function moveTrackInTop(index, delta) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const newIndex = index + delta;
+      if (newIndex < 0 || newIndex >= top.tracks.length) return;
+      const [item] = top.tracks.splice(index, 1);
+      top.tracks.splice(newIndex, 0, item);
+      top.updatedAt = Date.now();
+      saveData();
+      renderTopDetail(top);
+    }
+
+    function openMovePositionModal(index) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const track = top.tracks[index];
+      openModal("Mover o gestionar canción", `
+        <div class="flex items-center gap-3 p-3 rounded-2xl t-bg-elevated border t-border">
+          ${getCoverHtml(track.cover, "w-11 h-11")}
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">${escapeHtml(track.name)}</div>
+            <div class="text-xs t-text-muted truncate">Puesto actual: #${index + 1}</div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-1.5">Mover al puesto (1 a ${top.tracks.length})</label>
+          <div class="flex gap-2">
+            <input id="move-pos-input" type="number" min="1" max="${top.tracks.length}" value="${index + 1}" class="flex-1 t-bg-main border t-border rounded-xl px-3.5 py-2.5 text-sm font-bold t-text-main focus:outline-none" />
+            <button onclick="applyMovePosition(${index})" class="t-accent-bg px-5 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition">Mover</button>
+          </div>
+        </div>
+        <div class="pt-3 border-t t-border">
+          <button onclick="removeTrackFromTop(${index})" class="w-full py-2.5 rounded-xl text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 active:scale-95 transition">
+            Quitar canción de este Top
+          </button>
+        </div>
+      `);
+    }
+
+    function applyMovePosition(oldIndex) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const targetPos = parseInt(document.getElementById("move-pos-input").value, 10);
+      if (isNaN(targetPos) || targetPos < 1 || targetPos > top.tracks.length) {
+        showToast("Puesto inválido", "error");
+        return;
+      }
+      const [item] = top.tracks.splice(oldIndex, 1);
+      top.tracks.splice(targetPos - 1, 0, item);
+      top.updatedAt = Date.now();
+      saveData();
+      closeTopModal();
+      renderTopDetail(top);
+      showToast(`Movida al puesto #${targetPos}`);
+    }
+
+    function removeTrackFromTop(index) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      top.tracks.splice(index, 1);
+      top.updatedAt = Date.now();
+      saveData();
+      closeTopModal();
+      renderTopDetail(top);
+      showToast("Canción eliminada del Top");
+    }
+
+    function openEditScoreModal(index) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const track = top.tracks[index];
+      openModal("Puntaje de la canción", `
+        <p class="text-xs t-text-muted">Opcional: asigna una nota a <strong>${escapeHtml(track.name)}</strong> (ej. 9.8, 10, S+).</p>
+        <input id="edit-score-input" type="text" value="${escapeHtml(track.score || "")}" placeholder="Ej: 9.8" class="w-full t-bg-main border t-border rounded-xl px-3.5 py-2.5 text-sm font-bold t-text-main focus:outline-none" />
+        <div class="flex gap-2">
+          <button onclick="saveTrackScore(${index}, '')" class="flex-1 t-bg-elevated border t-border py-2.5 rounded-xl text-xs font-bold">Borrar</button>
+          <button onclick="saveTrackScore(${index})" class="flex-1 t-accent-bg py-2.5 rounded-xl text-xs font-bold">Guardar</button>
+        </div>
+      `);
+    }
+
+    function saveTrackScore(index, forcedVal) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const val = forcedVal !== undefined ? forcedVal : document.getElementById("edit-score-input").value.trim();
+      top.tracks[index].score = val;
+      top.updatedAt = Date.now();
+      saveData();
+      closeTopModal();
+      renderTopDetail(top);
+    }
+
+    // Crear / Editar / Eliminar Top
+    function openCreateTopModal() {
+      openModal("Crear nuevo Top", `
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-1.5">Nombre del Top</label>
+          <input id="new-top-title" type="text" placeholder="Ej: Top 20 Rock Nacional" class="w-full t-bg-main border t-border rounded-xl px-3.5 py-3 text-sm t-text-main focus:outline-none" />
+        </div>
+        <button onclick="createNewTop()" class="w-full t-accent-bg py-3 rounded-xl text-sm font-bold active:scale-95 transition">Crear Top</button>
+      `);
+      setTimeout(() => document.getElementById("new-top-title")?.focus(), 100);
+    }
+
+    function createNewTop() {
+      const title = document.getElementById("new-top-title").value.trim();
+      if (!title) {
+        showToast("Escribe un nombre para el Top", "error");
+        return;
+      }
+      const newTop = {
+        id: "top_" + Date.now(),
+        title,
+        updatedAt: Date.now(),
+        colorStyle: "left-bar",
+        colorRules: [
+          { id: "r_" + Date.now(), from: 1, to: 1, color: "#38bdf8" },
+          { id: "r_" + (Date.now() + 1), from: 2, to: 5, color: "#facc15" }
+        ],
+        tracks: []
+      };
+      appData.tops.unshift(newTop);
+      saveData();
+      closeTopModal();
+      setTimeout(() => openTopDetail(newTop.id), 50);
+    }
+
+    function openEditTopInfoModal() {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      openModal("Editar Top", `
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-1.5">Nombre del Top</label>
+          <input id="edit-top-title" type="text" value="${escapeHtml(top.title)}" class="w-full t-bg-main border t-border rounded-xl px-3.5 py-3 text-sm t-text-main focus:outline-none" />
+        </div>
+        <button onclick="saveEditTopInfo()" class="w-full t-accent-bg py-3 rounded-xl text-sm font-bold">Guardar cambios</button>
+      `);
+    }
+
+    function saveEditTopInfo() {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const title = document.getElementById("edit-top-title").value.trim();
+      if (!title) return;
+      top.title = title;
+      top.updatedAt = Date.now();
+      saveData();
+      closeTopModal();
+      renderCurrentView();
+    }
+
+    function confirmDeleteCurrentTop() {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      openModal("Eliminar Top", `
+        <p class="text-sm">¿Seguro que deseas eliminar <strong>${escapeHtml(top.title)}</strong>? Esta acción no se puede deshacer.</p>
+        <div class="flex gap-2 pt-2">
+          <button onclick="closeTopModal()" class="flex-1 t-bg-elevated border t-border py-2.5 rounded-xl text-xs font-bold">Cancelar</button>
+          <button onclick="deleteCurrentTop()" class="flex-1 bg-rose-600 text-white py-2.5 rounded-xl text-xs font-bold">Eliminar</button>
+        </div>
+      `);
+    }
+
+    function deleteCurrentTop() {
+      appData.tops = appData.tops.filter(t => t.id !== currentTopId);
+      saveData();
+      closeTopModal();
+      currentTopId = null;
+      setTimeout(() => {
+        renderCurrentView();
+        showToast("Top eliminado");
+      }, 60);
+    }
+
+    // =========================================================================
+    // 8. PERSONALIZACIÓN DE COLORES POR PUESTO
+    // =========================================================================
+    function openColorRulesModal() {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+
+      const styles = [
+        { id: "left-bar", label: "Barra lateral" },
+        { id: "full-border", label: "Marco completo" },
+        { id: "bar-number", label: "Barra + Número" }
+      ];
+
+      const rulesHtml = (top.colorRules || []).map((r, idx) => `
+        <div class="t-bg-elevated border t-border rounded-2xl p-3 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg shrink-0 border border-white/20" style="background:${r.color}"></span>
+            <div>
+              <div class="text-xs font-bold">${r.from === r.to ? `Puesto #${r.from}` : `Puestos #${r.from} al #${r.to}`}</div>
+              <div class="text-[11px] font-mono t-text-muted">${r.color}</div>
+            </div>
+          </div>
+          <button onclick="deleteColorRule(${idx})" class="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10" aria-label="Eliminar regla">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      `).join("");
+
+      const paletteHtml = QUICK_PALETTE.map(hex => `
+        <button type="button" onclick="pickRuleColor('${hex}')" class="w-7 h-7 rounded-full border-2 border-white/15 active:scale-90 transition" style="background:${hex}"></button>
+      `).join("");
+
+      openModal("Colores de Puestos", `
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-2">Estilo visual</label>
+          <div class="grid grid-cols-3 gap-2">
+            ${styles.map(s => `
+              <button onclick="setTopColorStyle('${s.id}')" class="py-2 px-2 rounded-xl text-xs font-bold border transition ${top.colorStyle === s.id ? "t-accent-bg border-transparent" : "t-bg-elevated t-border"}">
+                ${s.label}
+              </button>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="t-bg-main border t-border rounded-2xl p-3.5 space-y-3">
+          <p class="text-xs font-bold">Añadir regla de color</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] t-text-muted mb-1">Desde puesto</label>
+              <input id="rule-from" type="number" min="1" value="1" class="w-full t-bg-card border t-border rounded-xl px-3 py-2 text-sm font-bold t-text-main" />
+            </div>
+            <div>
+              <label class="block text-[11px] t-text-muted mb-1">Hasta puesto</label>
+              <input id="rule-to" type="number" min="1" value="1" class="w-full t-bg-card border t-border rounded-xl px-3 py-2 text-sm font-bold t-text-main" />
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            <input id="rule-color-picker" type="color" value="#38bdf8" oninput="document.getElementById('rule-color-hex').value = this.value" class="w-11 h-10 shrink-0" />
+            <input id="rule-color-hex" type="text" value="#38bdf8" oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value)) document.getElementById('rule-color-picker').value = this.value" class="flex-1 t-bg-card border t-border rounded-xl px-3 py-2 text-xs font-mono t-text-main" placeholder="#38bdf8" />
+            <button onclick="addColorRule()" class="t-accent-bg px-4 py-2 rounded-xl text-xs font-bold shrink-0">Añadir</button>
+          </div>
+
+          <div class="flex flex-wrap gap-2 pt-1">${paletteHtml}</div>
+        </div>
+
+        <div class="space-y-2">
+          <p class="text-xs font-semibold t-text-muted">Reglas activas (${(top.colorRules || []).length})</p>
+          ${rulesHtml || '<p class="text-xs t-text-muted">Sin reglas todavía.</p>'}
+        </div>
+      `);
+    }
+
+    function pickRuleColor(hex) {
+      document.getElementById("rule-color-picker").value = hex;
+      document.getElementById("rule-color-hex").value = hex;
+    }
+
+    function setTopColorStyle(style) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      top.colorStyle = style;
+      saveData();
+      renderTopDetail(top);
+      openColorRulesModal();
+    }
+
+    function addColorRule() {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      const from = parseInt(document.getElementById("rule-from").value, 10);
+      const to = parseInt(document.getElementById("rule-to").value, 10);
+      const color = document.getElementById("rule-color-hex").value.trim();
+
+      if (isNaN(from) || isNaN(to) || from < 1 || to < from) {
+        showToast("Rango de puestos inválido", "error");
+        return;
+      }
+      if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        showToast("Color HEX inválido (ej. #38bdf8)", "error");
+        return;
+      }
+      if (!top.colorRules) top.colorRules = [];
+      top.colorRules.push({ id: "r_" + Date.now(), from, to, color });
+      top.colorRules.sort((a, b) => a.from - b.from);
+      saveData();
+      renderTopDetail(top);
+      openColorRulesModal();
+    }
+
+    function deleteColorRule(idx) {
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!top) return;
+      top.colorRules.splice(idx, 1);
+      saveData();
+      renderTopDetail(top);
+      openColorRulesModal();
+    }
+
+    // =========================================================================
+    // 9. MODAL AÑADIR CANCIONES (LUPA SPOTIFY + MIS CARPETAS + MANUAL)
+    // =========================================================================
+    let songPickerTarget = "top"; // 'top' | 'folder'
+    let songPickerTab = "spotify"; // 'spotify' | 'folders' | 'manual'
+    let selectedPickerFolderId = null;
+    let searchDebounceTimer = null;
+
+    function openAddSongToTopModal() {
+      songPickerTarget = "top";
+      songPickerTab = "spotify";
+      selectedPickerFolderId = appData.folders[0]?.id || null;
+      renderSongPickerModal();
+    }
+
+    function openAddSongToFolderModal() {
+      songPickerTarget = "folder";
+      songPickerTab = "spotify";
+      renderSongPickerModal();
+    }
+
+    function isTrackInList(list, track) {
+      return list.some(t =>
+        (track.spotifyId && t.spotifyId === track.spotifyId) ||
+        t.id === track.id ||
+        (t.name.trim().toLowerCase() === track.name.trim().toLowerCase() &&
+         (t.artist || "").trim().toLowerCase() === (track.artist || "").trim().toLowerCase())
+      );
+    }
+
+    function renderSongPickerModal() {
+      const title = songPickerTarget === "top" ? "Añadir canción al Top" : "Añadir a la Carpeta";
+      const tabsHtml = songPickerTarget === "top"
+        ? `
+          <div class="grid grid-cols-3 gap-1.5 p-1 rounded-2xl t-bg-main border t-border">
+            <button onclick="switchPickerTab('spotify')" class="py-2 rounded-xl text-xs font-bold transition ${songPickerTab === 'spotify' ? 't-accent-bg' : 't-text-muted'}">Lupa Spotify</button>
+            <button onclick="switchPickerTab('folders')" class="py-2 rounded-xl text-xs font-bold transition ${songPickerTab === 'folders' ? 't-accent-bg' : 't-text-muted'}">Mis Carpetas</button>
+            <button onclick="switchPickerTab('manual')" class="py-2 rounded-xl text-xs font-bold transition ${songPickerTab === 'manual' ? 't-accent-bg' : 't-text-muted'}">Manual</button>
+          </div>
+        `
+        : `
+          <div class="grid grid-cols-2 gap-1.5 p-1 rounded-2xl t-bg-main border t-border">
+            <button onclick="switchPickerTab('spotify')" class="py-2 rounded-xl text-xs font-bold transition ${songPickerTab === 'spotify' ? 't-accent-bg' : 't-text-muted'}">Lupa Spotify</button>
+            <button onclick="switchPickerTab('manual')" class="py-2 rounded-xl text-xs font-bold transition ${songPickerTab === 'manual' ? 't-accent-bg' : 't-text-muted'}">Manual</button>
+          </div>
+        `;
+
+      let contentHtml = "";
+
+      if (songPickerTab === "spotify") {
+        if (!spotifyToken) {
+          contentHtml = `
+            <div class="t-bg-elevated border t-border rounded-2xl p-4 text-center space-y-3">
+              <p class="text-xs t-text-muted">Inicia sesión con Spotify para buscar canciones reales con carátulas y álbumes al instante.</p>
+              <button onclick="startSpotifyLogin()" class="bg-[#1db954] text-black font-bold text-xs py-2.5 px-4 rounded-xl">Conectar con Spotify</button>
+              <p class="text-[11px] t-text-muted">O usa la pestaña <strong>Manual</strong> para agregar canciones sin conexión.</p>
+            </div>
+          `;
+        } else {
+          contentHtml = `
+            <div class="relative">
+              <input id="spotify-modal-search" type="text" placeholder="Buscar canción o artista en Spotify..." oninput="handleSpotifySearchInput(this.value)" class="w-full t-bg-main border t-border rounded-xl pl-9 pr-3 py-2.5 text-sm t-text-main focus:outline-none focus:border-emerald-500" />
+              <svg class="w-4 h-4 t-text-muted absolute left-3 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <div id="spotify-search-results" class="space-y-2 max-h-[48dvh] overflow-y-auto pr-1">
+              <p class="text-xs t-text-muted text-center py-4">Cargando escuchadas recientemente...</p>
+            </div>
+          `;
+        }
+      } else if (songPickerTab === "folders") {
+        if (appData.folders.length === 0) {
+          contentHtml = `<p class="text-xs t-text-muted text-center py-6">No tienes carpetas creadas. Crea una en la pestaña Carpetas.</p>`;
+        } else {
+          const folderChips = appData.folders.map(f => `
+            <button onclick="selectPickerFolder('${f.id}')" class="pl-1.5 pr-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 flex items-center gap-2 transition ${selectedPickerFolderId === f.id ? 't-accent-bg border-transparent' : 't-bg-elevated t-border'}">
+              ${getFolderThumbHtml(f, "w-6 h-6")}
+              <span>${escapeHtml(f.name)}</span>
+            </button>
+          `).join("");
+
+          const activeFolder = appData.folders.find(f => f.id === selectedPickerFolderId) || appData.folders[0];
+          const targetTop = appData.tops.find(t => t.id === currentTopId);
+          const remainingCount = (activeFolder?.tracks || []).filter(tr => !isTrackInList(targetTop?.tracks || [], tr)).length;
+
+          const tracksHtml = (activeFolder?.tracks || []).map(track => {
+            const exists = isTrackInList(targetTop?.tracks || [], track);
+            return `
+              <div class="t-bg-elevated border t-border rounded-2xl p-2.5 flex items-center gap-2.5">
+                ${getCoverHtml(track.cover, "w-10 h-10")}
+                <div class="min-w-0 flex-1">
+                  <div class="text-xs font-bold truncate">${escapeHtml(track.name)}</div>
+                  <div class="text-[11px] t-text-muted truncate">${escapeHtml(track.artist)}${track.album ? ` • ${escapeHtml(track.album)}` : ""}</div>
+                </div>
+                <button onclick='addTrackToTarget(${JSON.stringify(track).replace(/'/g, "&#39;")}, this)' ${exists ? "disabled" : ""} class="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition ${exists ? "bg-emerald-500/20 text-emerald-300" : "t-accent-bg active:scale-95"}">
+                  ${exists ? "En Top ✓" : "+ Añadir"}
+                </button>
+              </div>
+            `;
+          }).join("");
+
+          contentHtml = `
+            <div class="flex gap-2 overflow-x-auto pb-1">${folderChips}</div>
+            ${remainingCount > 1 ? `
+              <button onclick="addAllFromFolderToTop('${activeFolder.id}')" class="w-full py-2 rounded-xl t-bg-elevated border t-border text-xs font-bold t-accent-text active:scale-95 transition">
+                + Añadir las ${remainingCount} canciones restantes de "${escapeHtml(activeFolder.name)}"
+              </button>
+            ` : ""}
+            <div class="space-y-2 max-h-[44dvh] overflow-y-auto pr-1">
+              ${tracksHtml || '<p class="text-xs t-text-muted text-center py-6">Esta carpeta no tiene canciones todavía.</p>'}
+            </div>
+          `;
+        }
+      } else if (songPickerTab === "manual") {
+        contentHtml = `
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold t-text-muted mb-1">Nombre de la canción *</label>
+              <input id="manual-name" type="text" placeholder="Ej: Mario Neta" class="w-full t-bg-main border t-border rounded-xl px-3 py-2.5 text-sm t-text-main" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold t-text-muted mb-1">Artista *</label>
+              <input id="manual-artist" type="text" placeholder="Ej: El Cuarteto De Nos" class="w-full t-bg-main border t-border rounded-xl px-3 py-2.5 text-sm t-text-main" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold t-text-muted mb-1">Álbum</label>
+              <input id="manual-album" type="text" placeholder="Ej: Jueves" class="w-full t-bg-main border t-border rounded-xl px-3 py-2.5 text-sm t-text-main" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold t-text-muted mb-1">URL de portada (opcional)</label>
+              <input id="manual-cover" type="url" placeholder="https://..." class="w-full t-bg-main border t-border rounded-xl px-3 py-2.5 text-sm t-text-main" />
+            </div>
+            <button onclick="submitManualTrack()" class="w-full t-accent-bg py-3 rounded-xl text-sm font-bold active:scale-95 transition">Agregar canción</button>
+          </div>
+        `;
+      }
+
+      openModal(title, `${tabsHtml}<div class="space-y-3">${contentHtml}</div>`);
+
+      if (songPickerTab === "spotify" && spotifyToken) {
+        loadRecentIntoPicker();
+      }
+    }
+
+    function switchPickerTab(tab) {
+      songPickerTab = tab;
+      renderSongPickerModal();
+    }
+
+    function selectPickerFolder(folderId) {
+      selectedPickerFolderId = folderId;
+      renderSongPickerModal();
+    }
+
+    function addAllFromFolderToTop(folderId) {
+      const folder = appData.folders.find(f => f.id === folderId);
+      const top = appData.tops.find(t => t.id === currentTopId);
+      if (!folder || !top) return;
+
+      let added = 0;
+      folder.tracks.forEach(track => {
+        if (!isTrackInList(top.tracks, track)) {
+          top.tracks.push({ ...track, score: "" });
+          added++;
+        }
+      });
+
+      if (added > 0) {
+        top.updatedAt = Date.now();
+        saveData();
+        renderTopDetail(top);
+        renderSongPickerModal();
+        showToast(`${added} canciones añadidas al Top`, "success");
+      }
+    }
+
+    async function loadRecentIntoPicker() {
+      const box = document.getElementById("spotify-search-results");
+      if (!box) return;
+      const tracks = recentTracksCache.length > 0 ? recentTracksCache : await fetchRecentlyPlayed();
+      renderSpotifyResultsList(tracks, "Escuchadas recientemente");
+    }
+
+    function handleSpotifySearchInput(val) {
+      clearTimeout(searchDebounceTimer);
+      if (!val.trim()) {
+        loadRecentIntoPicker();
+        return;
+      }
+      const box = document.getElementById("spotify-search-results");
+      if (box) box.innerHTML = `<p class="text-xs t-text-muted text-center py-4">Buscando en Spotify...</p>`;
+      searchDebounceTimer = setTimeout(async () => {
+        const results = await searchSpotifyTracks(val, 12);
+        renderSpotifyResultsList(results || [], "Resultados de Spotify");
+      }, 360);
+    }
+
+    function renderSpotifyResultsList(tracks, heading) {
+      const box = document.getElementById("spotify-search-results");
+      if (!box) return;
+      if (!tracks || tracks.length === 0) {
+        box.innerHTML = `<p class="text-xs t-text-muted text-center py-6">No se encontraron canciones.</p>`;
+        return;
+      }
+
+      const existingList = songPickerTarget === "top"
+        ? (appData.tops.find(t => t.id === currentTopId)?.tracks || [])
+        : (appData.folders.find(f => f.id === currentFolderId)?.tracks || []);
+
+      box.innerHTML = `<p class="text-[11px] font-semibold uppercase tracking-wider t-text-muted">${heading}</p>` + tracks.map(track => {
+        const exists = isTrackInList(existingList, track);
+        return `
+          <div class="t-bg-elevated border t-border rounded-2xl p-2.5 flex items-center gap-2.5">
+            ${getCoverHtml(track.cover, "w-10 h-10")}
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-bold truncate">${escapeHtml(track.name)}</div>
+              <div class="text-[11px] t-text-muted truncate">${escapeHtml(track.artist)}${track.album ? ` • ${escapeHtml(track.album)}` : ""}</div>
+            </div>
+            <button onclick='addTrackToTarget(${JSON.stringify(track).replace(/'/g, "&#39;")}, this)' ${exists ? "disabled" : ""} class="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition ${exists ? "bg-emerald-500/20 text-emerald-300" : "t-accent-bg active:scale-95"}">
+              ${exists ? "Añadida ✓" : "+ Añadir"}
+            </button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function addTrackToTarget(track, btnEl) {
+      if (songPickerTarget === "top") {
+        const top = appData.tops.find(t => t.id === currentTopId);
+        if (!top || isTrackInList(top.tracks, track)) return;
+        top.tracks.push({ ...track, score: "" });
+        top.updatedAt = Date.now();
+        saveData();
+        renderTopDetail(top);
+        showToast(`Añadida a ${top.title}`, "success");
+      } else {
+        const folder = appData.folders.find(f => f.id === currentFolderId);
+        if (!folder || isTrackInList(folder.tracks, track)) return;
+        folder.tracks.push({ ...track });
+        saveData();
+        renderFolderDetail(folder);
+        showToast(`Guardada en ${folder.name}`, "success");
+      }
+
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = "Añadida ✓";
+        btnEl.className = "px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 bg-emerald-500/20 text-emerald-300";
+      }
+    }
+
+    function submitManualTrack() {
+      const name = document.getElementById("manual-name").value.trim();
+      const artist = document.getElementById("manual-artist").value.trim();
+      const album = document.getElementById("manual-album").value.trim();
+      const cover = document.getElementById("manual-cover").value.trim();
+
+      if (!name || !artist) {
+        showToast("Completa al menos canción y artista", "error");
+        return;
+      }
+      const track = { id: "man_" + Date.now(), name, artist, album, cover };
+      addTrackToTarget(track, null);
+      closeTopModal();
+    }
+
+    // =========================================================================
+    // 10. VISTAS: CARPETAS DE CANCIONES (SIN EMOJIS, CON COLLAGE 2x2)
+    // =========================================================================
+    function renderFoldersGrid() {
+      const container = document.getElementById("folders-grid-container");
+      document.getElementById("folders-count-label").textContent = `${appData.folders.length} carpeta${appData.folders.length === 1 ? "" : "s"}`;
+
+      if (appData.folders.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full t-bg-card border t-border rounded-3xl p-8 text-center space-y-2">
+            <div class="w-12 h-12 rounded-2xl t-bg-elevated border t-border mx-auto flex items-center justify-center t-accent-text">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+            </div>
+            <p class="font-bold text-sm">No hay carpetas todavía</p>
+            <p class="text-xs t-text-muted">Crea carpetas por artista o género para añadir canciones a tus Tops con un solo toque.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = appData.folders.map(f => `
+        <div onclick="openFolderDetail('${f.id}')" class="t-bg-card border t-border rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition flex items-center gap-3" style="border-left: 4px solid ${f.color || '#38bdf8'};">
+          ${getFolderThumbHtml(f, "w-12 h-12")}
+          <div class="min-w-0 flex-1">
+            <h3 class="font-bold text-sm truncate">${escapeHtml(f.name)}</h3>
+            <p class="text-xs t-text-muted">${f.tracks.length} canción${f.tracks.length === 1 ? "" : "es"}</p>
+          </div>
+          <svg class="w-4 h-4 t-text-muted shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </div>
+      `).join("");
+    }
+
+    function renderFolderDetail(folder) {
+      const missingInFolder = folder.tracks.filter(t => !t.cover).length;
+      const syncRow = document.getElementById("folder-detail-sync-row");
+      if (missingInFolder > 0) {
+        syncRow.classList.remove("hidden");
+      } else {
+        syncRow.classList.add("hidden");
+      }
+
+      const container = document.getElementById("folder-tracks-container");
+      if (folder.tracks.length === 0) {
+        container.innerHTML = `
+          <div class="t-bg-card border t-border rounded-3xl p-8 text-center space-y-2">
+            <div class="w-12 h-12 rounded-2xl t-bg-elevated border t-border mx-auto flex items-center justify-center t-text-muted">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+            </div>
+            <p class="font-bold text-sm">Carpeta vacía</p>
+            <p class="text-xs t-text-muted">Toca "+ Añadir canciones" para guardar temas aquí.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = folder.tracks.map((track, idx) => `
+        <div class="t-bg-card border t-border rounded-2xl p-3 flex items-center gap-3">
+          ${getCoverHtml(track.cover, "w-10 h-10")}
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-sm truncate">${escapeHtml(track.name)}</div>
+            <div class="text-xs t-text-muted truncate">${escapeHtml(track.artist)}${track.album ? ` • ${escapeHtml(track.album)}` : ""}</div>
+          </div>
+          <button onclick="removeTrackFromFolder(${idx})" class="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 active:scale-90 transition" title="Quitar">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      `).join("");
+    }
+
+    function removeTrackFromFolder(idx) {
+      const folder = appData.folders.find(f => f.id === currentFolderId);
+      if (!folder) return;
+      folder.tracks.splice(idx, 1);
+      saveData();
+      renderFolderDetail(folder);
+    }
+
+    // Crear / Editar carpeta: solo Nombre (y color de acento opcional con valor por defecto)
+    function openFolderModal(editId = null) {
+      const existing = editId ? appData.folders.find(f => f.id === editId) : null;
+      const selectedColor = existing?.color || "#38bdf8";
+
+      openModal(existing ? "Editar carpeta" : "Nueva carpeta", `
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-1.5">Nombre de la carpeta</label>
+          <input id="folder-name-input" type="text" value="${escapeHtml(existing?.name || "")}" placeholder="Ej: Rock Nacional" class="w-full t-bg-main border t-border rounded-xl px-3.5 py-2.5 text-sm t-text-main focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold t-text-muted mb-1.5">Color de acento (opcional)</label>
+          <div class="flex items-center gap-2.5">
+            <input id="folder-color-input" type="color" value="${selectedColor}" class="w-11 h-10 shrink-0" />
+            <div class="flex flex-wrap gap-1.5">
+              ${QUICK_PALETTE.slice(0, 7).map(c => `<button type="button" onclick="document.getElementById('folder-color-input').value='${c}'" class="w-6 h-6 rounded-full border border-white/20 active:scale-90 transition" style="background:${c}"></button>`).join("")}
+            </div>
+          </div>
+        </div>
+        <button onclick="saveFolderModal('${editId || ""}')" class="w-full t-accent-bg py-3 rounded-xl text-sm font-bold active:scale-95 transition">${existing ? "Guardar cambios" : "Crear carpeta"}</button>
+      `);
+      setTimeout(() => document.getElementById("folder-name-input")?.focus(), 100);
+    }
+
+    function saveFolderModal(editId) {
+      const name = document.getElementById("folder-name-input").value.trim();
+      const color = document.getElementById("folder-color-input").value || "#38bdf8";
+      if (!name) {
+        showToast("Escribe un nombre para la carpeta", "error");
+        return;
+      }
+
+      if (editId) {
+        const f = appData.folders.find(x => x.id === editId);
+        if (f) {
+          f.name = name;
+          f.color = color;
+        }
+      } else {
+        appData.folders.unshift({ id: "folder_" + Date.now(), name, color, tracks: [] });
+      }
+      saveData();
+      closeTopModal();
+      setTimeout(() => renderCurrentView(), 50);
+    }
+
+    function confirmDeleteCurrentFolder() {
+      const folder = appData.folders.find(f => f.id === currentFolderId);
+      if (!folder) return;
+      openModal("Eliminar carpeta", `
+        <p class="text-sm">¿Eliminar la carpeta <strong>${escapeHtml(folder.name)}</strong>? Las canciones que ya estén en tus Tops no se borrarán.</p>
+        <div class="flex gap-2 pt-2">
+          <button onclick="closeTopModal()" class="flex-1 t-bg-elevated border t-border py-2.5 rounded-xl text-xs font-bold">Cancelar</button>
+          <button onclick="deleteCurrentFolder()" class="flex-1 bg-rose-600 text-white py-2.5 rounded-xl text-xs font-bold">Eliminar</button>
+        </div>
+      `);
+    }
+
+    function deleteCurrentFolder() {
+      appData.folders = appData.folders.filter(f => f.id !== currentFolderId);
+      saveData();
+      closeTopModal();
+      currentFolderId = null;
+      setTimeout(() => {
+        renderCurrentView();
+        showToast("Carpeta eliminada");
+      }, 60);
+    }
+
+    // =========================================================================
+    // 11. AJUSTES, TEMA CON VISTA PREVIA Y COPIA DE SEGURIDAD JSON
+    // =========================================================================
+    function applyTheme(colors) {
+      const root = document.documentElement;
+      Object.entries(colors).forEach(([key, val]) => {
+        root.style.setProperty(key, val);
+      });
+    }
+
+    function renderSettingsView() {
+      document.getElementById("input-client-id").value = appData.spotifyClientId || DEFAULT_CLIENT_ID;
+      document.getElementById("input-redirect-uri").value = REDIRECT_URI;
+      updateSpotifyStatusUI();
+
+      const presetsBox = document.getElementById("theme-presets-container");
+      presetsBox.innerHTML = THEME_PRESETS.map(p => `
+        <button onclick="selectThemePreset('${p.id}')" class="t-bg-elevated border t-border rounded-xl p-2.5 text-left active:scale-95 transition">
+          <div class="flex items-center gap-1.5 mb-1.5">
+            <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${p.colors['--bg-main']}"></span>
+            <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${p.colors['--bg-card']}"></span>
+            <span class="w-3.5 h-3.5 rounded-full border border-white/20" style="background:${p.colors['--accent']}"></span>
+          </div>
+          <div class="text-xs font-bold truncate">${p.name}</div>
+        </button>
+      `).join("");
+
+      const fields = [
+        { key: "--bg-main", label: "Fondo principal" },
+        { key: "--bg-card", label: "Tarjetas / Superficies" },
+        { key: "--accent", label: "Acento / Botones" },
+        { key: "--text-main", label: "Texto principal" },
+        { key: "--text-muted", label: "Texto secundario" },
+        { key: "--border-color", label: "Bordes" }
+      ];
+
+      const customBox = document.getElementById("theme-custom-inputs");
+      customBox.innerHTML = fields.map(f => {
+        const val = appData.theme[f.key] || "#000000";
+        return `
+          <div class="t-bg-main border t-border rounded-xl p-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-xs font-semibold truncate">${f.label}</div>
+              <div id="hex-label-${f.key}" class="text-[10px] font-mono t-text-muted">${val}</div>
+            </div>
+            <input type="color" value="${val}" oninput="updateThemeColor('${f.key}', this.value)" class="w-9 h-8 shrink-0" />
+          </div>
+        `;
+      }).join("");
+    }
+
+    function selectThemePreset(presetId) {
+      const preset = THEME_PRESETS.find(p => p.id === presetId);
+      if (!preset) return;
+      appData.theme = { ...preset.colors };
+      applyTheme(appData.theme);
+      saveData();
+      renderSettingsView();
+      showToast(`Tema "${preset.name}" aplicado`);
+    }
+
+    function updateThemeColor(cssVar, hex) {
+      appData.theme[cssVar] = hex;
+      if (cssVar === "--bg-card") {
+        appData.theme["--bg-elevated"] = hex;
+      }
+      applyTheme(appData.theme);
+      const label = document.getElementById(`hex-label-${cssVar}`);
+      if (label) label.textContent = hex;
+      saveData();
+    }
+
+    function saveSpotifyClientId() {
+      const val = document.getElementById("input-client-id").value.trim();
+      if (!val) {
+        showToast("El Client ID no puede estar vacío", "error");
+        return;
+      }
+      appData.spotifyClientId = val;
+      saveData();
+      showToast("Client ID guardado", "success");
+    }
+
+    function copyRedirectUri() {
+      const input = document.getElementById("input-redirect-uri");
+      input.select();
+      input.setSelectionRange(0, 99999);
+      try {
+        document.execCommand("copy");
+        showToast("Redirect URI copiada al portapapeles", "success");
+      } catch (e) {
+        showToast("No se pudo copiar automáticamente", "error");
+      }
+    }
+
+    function exportBackupJson() {
+      const blob = new Blob([JSON.stringify(appData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `topify-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Copia de seguridad descargada", "success");
+    }
+
+    function importBackupJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (!Array.isArray(parsed.tops) || !Array.isArray(parsed.folders)) {
+            showToast("El archivo JSON no tiene un formato válido", "error");
+            return;
+          }
+          appData = {
+            spotifyClientId: parsed.spotifyClientId || DEFAULT_CLIENT_ID,
+            theme: parsed.theme || { ...THEME_PRESETS[0].colors },
+            tops: parsed.tops,
+            folders: parsed.folders
+          };
+          saveData();
+          applyTheme(appData.theme);
+          renderCurrentView();
+          showToast("¡Datos restaurados con éxito!", "success");
+        } catch (err) {
+          showToast("Error al leer el archivo JSON", "error");
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function confirmFactoryReset() {
+      openModal("Reiniciar datos de fábrica", `
+        <p class="text-sm">Esto borrará todos tus Tops, Carpetas y tema personalizado, restaurando los datos de ejemplo iniciales.</p>
+        <div class="flex gap-2 pt-2">
+          <button onclick="closeTopModal()" class="flex-1 t-bg-elevated border t-border py-2.5 rounded-xl text-xs font-bold">Cancelar</button>
+          <button onclick="executeFactoryReset()" class="flex-1 bg-rose-600 text-white py-2.5 rounded-xl text-xs font-bold">Sí, reiniciar</button>
+        </div>
+      `);
+    }
+
+    function executeFactoryReset() {
+      appData = createDefaultData();
+      saveData();
+      applyTheme(appData.theme);
+      closeTopModal();
+      setTimeout(() => {
+        renderCurrentView();
+        showToast("Datos reiniciados de fábrica");
+      }, 60);
+    }
+
+    // =========================================================================
+    // 12. INICIALIZACIÓN
+    // =========================================================================
+    async function initApp() {
+      applyTheme(appData.theme);
+      const justLoggedIn = await checkSpotifyRedirect();
+      updateSpotifyStatusUI();
+      initHistoryGuard();
+      renderCurrentView();
+
+      if (spotifyToken) {
+        fetchRecentlyPlayed();
+        if (countMissingCovers() > 0) {
+          syncMissingSpotifyCovers({ silent: !justLoggedIn });
+        }
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", initApp);
+  </script>
+</body>
+</html>
